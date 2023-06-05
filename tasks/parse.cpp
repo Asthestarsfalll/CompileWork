@@ -183,6 +183,8 @@ public:
       follows.insert("#");
     for (auto it = nonterminals.begin(); it != nonterminals.end(); it++) {
       Nonterminal node = it->second;
+      if (followLocks[target_name].count(node.name))
+        continue;
       for (auto prod : node.productions) {
         for (auto s_it = prod.begin(); s_it != prod.end();) {
           std::string name({*s_it});
@@ -192,18 +194,26 @@ public:
               continue;
             std::set<std::string> temp;
             if (s_it == prod.end() || *s_it == ' ') {
+              followLocks[target_name].insert(node.name);
               temp = getFollowSet(getTargetNonterminal(node.name));
-              concat(follows, temp);
-            } else if (isNonterminal(*s_it)) {
-              temp = getFirstSet(getTargetNonterminal(node.name));
-              if (temp.count(Epsilon)) {
-                filterEspilon(temp);
-                concat(follows, temp);
-                temp = getFollowSet(getTargetNonterminal(node.name));
-              }
+              followLocks[target_name].erase(node.name);
               concat(follows, temp);
             } else {
-              follows.insert({*s_it});
+              std::string next_name({*s_it});
+              getFullName<std::string::iterator>(s_it, next_name);
+              if (isNonterminal(next_name)) {
+                temp = getFirstSet(getTargetNonterminal({next_name}));
+                if (temp.count(Epsilon)) {
+                  filterEspilon(temp);
+                  concat(follows, temp);
+                  followLocks[target_name].insert(node.name);
+                  temp = getFollowSet(getTargetNonterminal(node.name));
+                  followLocks[target_name].erase(node.name);
+                }
+                concat(follows, temp);
+              } else {
+                follows.insert({*s_it});
+              }
             }
           }
         }
@@ -345,6 +355,7 @@ private:
   std::unordered_map<std::string, Terminal> terminals;
   std::unordered_map<std::string, std::set<std::string>> firstCache,
       followCache, selectCache;
+  std::unordered_map<std::string, std::set<std::string>> followLocks;
   std::string start_symbol;
 };
 
@@ -367,20 +378,46 @@ Grammar buildGrammar(std::string start_symbol, GrammarInputType nonterminals) {
 }
 
 int main(int argc, char *argv[]) {
-  GrammarInputType inputs = {{"S", {"a", "/", "(T)"}}, {"T", {"T,S", "S"}}};
-  std::string start_symbol = "S";
+  // GrammarInputType inputs = {{"S", {"a", "/", "(T)"}}, {"T", {"T,S",
+  // "S"}}}; std::string start_symbol = "S";
+  GrammarInputType inputs = {{"E", {"TE'"}},
+                             {"E'", {"+E", " "}},
+                             {"T", {"FT'"}},
+                             {"T'", {"T", " "}},
+                             {"F", {"PF'"}},
+                             {"F'", {"*F'", " "}},
+                             {"P", {"(E)", "a", "b", "/"}}};
+  std::string start_symbol = "E";
   Grammar G = buildGrammar(start_symbol, inputs);
   std::cout << G;
   G.eliminateLeftRecursion();
   std::cout << G;
-  G.getFirstSet(G.getTargetNonterminal("S"));
-  G.getFirstSet(G.getTargetNonterminal("T'"));
+  // G.getFirstSet(G.getTargetNonterminal("S"));
+  // G.getFirstSet(G.getTargetNonterminal("T'"));
+  // G.getFirstSet(G.getTargetNonterminal("T"));
+  // G.printSets("first");
+
+  // G.getFollowSet(G.getTargetNonterminal("S"));
+  // G.getFollowSet(G.getTargetNonterminal("T'"));
+  // G.getFollowSet(G.getTargetNonterminal("T"));
+  // G.printSets("follow");
+
+  G.getFirstSet(G.getTargetNonterminal("E"));
+  G.getFirstSet(G.getTargetNonterminal("E'"));
   G.getFirstSet(G.getTargetNonterminal("T"));
+  G.getFirstSet(G.getTargetNonterminal("T'"));
+  G.getFirstSet(G.getTargetNonterminal("F"));
+  G.getFirstSet(G.getTargetNonterminal("F'"));
+  G.getFirstSet(G.getTargetNonterminal("P"));
   G.printSets("first");
 
-  G.getFollowSet(G.getTargetNonterminal("S"));
-  G.getFollowSet(G.getTargetNonterminal("T'"));
+  G.getFollowSet(G.getTargetNonterminal("E"));
+  G.getFollowSet(G.getTargetNonterminal("E'"));
   G.getFollowSet(G.getTargetNonterminal("T"));
+  G.getFollowSet(G.getTargetNonterminal("T'"));
+  G.getFollowSet(G.getTargetNonterminal("F"));
+  G.getFollowSet(G.getTargetNonterminal("F'"));
+  G.getFollowSet(G.getTargetNonterminal("P"));
   G.printSets("follow");
   return 0;
 }
