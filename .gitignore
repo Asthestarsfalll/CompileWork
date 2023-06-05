@@ -1,2 +1,6 @@
 */*.o
 */*.c
+*/*.out
+*/.vscode
+*/parse
+*/lexical_analysis
