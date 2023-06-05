@@ -62,11 +62,11 @@ private:
 const StringList opreratorSymbols{"+", "-",  "*",  "/",  "=",  "<",
                                   ">", "<=", ">=", "<>", ":=", "#"};
 
-const StringList seperateeSymbols{".", ",", ";", "(", ")"};
+const StringList seperaterSymbols{".", ",", ";", "(", ")"};
 
-const StringList reservedWords{"const", "var",  "procedure", "begin", "end",
-                               "if",    "then", "else",      "while", "do",
-                               "call",  "read", "write",     "odd"};
+const StringList reservedWords{"const", "var",   "procedure", "begin", "end",
+                               "if",    "then",  "while",     "do",    "call",
+                               "read",  "write", "odd"};
 
 std::unordered_map<int, std::string> tokenTypeMapper = {
     {INVALID_INDENTIFIER, "非法字符(串)"},
@@ -234,7 +234,7 @@ private:
     if (opreratorSymbols.contain(ch_str)) {
       return advance(OPERATOR);
     }
-    if (seperateeSymbols.contain(ch_str)) {
+    if (seperaterSymbols.contain(ch_str)) {
       return advance(SEPERATER);
     }
     lineno = cur_line;
