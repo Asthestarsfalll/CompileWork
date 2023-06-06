@@ -147,6 +147,28 @@ public:
     return false;
   }
 
+  std::set<std::string> getTargetFirstSet(std::string name) {
+    return getFirstSet(getTargetNonterminal(name));
+  }
+
+  std::set<std::string> getTargetFollowSet(std::string name) {
+    return getFollowSet(getTargetNonterminal(name));
+  }
+
+  std::set<std::string> getTargetSelectFollowSet(std::string name,
+                                                 std::string production) {
+    auto node = getTargetNonterminal(name);
+    bool is_exist = false;
+    for (auto it = node.productions.begin(); it != node.productions.end();
+         it++) {
+      if (*it == production)
+        is_exist = true;
+    }
+    if (!is_exist)
+      throw std::runtime_error("Unexpected production for Nonterminal " + name);
+    return getSelectSet(node, production);
+  }
+
   std::set<std::string> getFirstSet(Nonterminal node) {
     auto cache = firstCache.find(node.name);
     if (cache != firstCache.end())
@@ -199,7 +221,7 @@ public:
               followLocks[target_name].erase(node.name);
               concat(follows, temp);
             } else {
-              std::string next_name({*s_it});
+              std::string next_name = std::string({*s_it});
               getFullName<std::string::iterator>(s_it, next_name);
               if (isNonterminal(next_name)) {
                 temp = getFirstSet(getTargetNonterminal({next_name}));
@@ -212,7 +234,7 @@ public:
                 }
                 concat(follows, temp);
               } else {
-                follows.insert({*s_it});
+                follows.insert(next_name);
               }
             }
           }
@@ -222,12 +244,43 @@ public:
     followCache[target_name] = follows;
     return follows;
   };
-  std::set<std::string> getSelectSet(Nonterminal node) {
-    auto cache = selectCache.find(node.name);
+  std::set<std::string> getSelectSet(Nonterminal node, std::string production) {
+    auto cache = selectCache.find(node.name + " --> " + production);
     if (cache != selectCache.end())
       return cache->second;
 
+    bool generallyToEmpty = true;
     std::set<std::string> selects;
+    for (auto s_it = production.begin(); s_it != production.end();) {
+      if (isNonterminal(*s_it)) {
+        auto n = getTargetNonterminal({*s_it});
+        auto temp = getFirstSet(n);
+        s_it++;
+        if (temp.count(Epsilon)) {
+          filterEspilon(temp);
+          concat(selects, temp);
+        } else {
+          generallyToEmpty = false;
+          concat(selects, temp);
+          break;
+        }
+      }
+      if (!isNonterminal(*s_it) && *s_it != ' ') {
+        generallyToEmpty = false;
+        selects.insert({*s_it});
+        break;
+      } else if (*s_it == ' ') {
+        generallyToEmpty = false;
+        auto temp = getFollowSet(node);
+        concat(selects, temp);
+        break;
+      }
+    }
+    if (generallyToEmpty) {
+        auto temp = getFollowSet(node);
+        concat(selects, temp);
+    }
+    selectCache[node.name + " --> " + production] = selects;
     return selects;
   };
 
@@ -402,22 +455,30 @@ int main(int argc, char *argv[]) {
   // G.getFollowSet(G.getTargetNonterminal("T"));
   // G.printSets("follow");
 
-  G.getFirstSet(G.getTargetNonterminal("E"));
-  G.getFirstSet(G.getTargetNonterminal("E'"));
-  G.getFirstSet(G.getTargetNonterminal("T"));
-  G.getFirstSet(G.getTargetNonterminal("T'"));
-  G.getFirstSet(G.getTargetNonterminal("F"));
-  G.getFirstSet(G.getTargetNonterminal("F'"));
-  G.getFirstSet(G.getTargetNonterminal("P"));
+  G.getTargetFirstSet("E");
+  G.getTargetFirstSet("E'");
+  G.getTargetFirstSet("T");
+  G.getTargetFirstSet("T'");
+  G.getTargetFirstSet("F");
+  G.getTargetFirstSet("F'");
+  G.getTargetFirstSet("P");
   G.printSets("first");
 
-  G.getFollowSet(G.getTargetNonterminal("E"));
-  G.getFollowSet(G.getTargetNonterminal("E'"));
-  G.getFollowSet(G.getTargetNonterminal("T"));
-  G.getFollowSet(G.getTargetNonterminal("T'"));
-  G.getFollowSet(G.getTargetNonterminal("F"));
-  G.getFollowSet(G.getTargetNonterminal("F'"));
-  G.getFollowSet(G.getTargetNonterminal("P"));
+  G.getTargetFollowSet("E");
+  G.getTargetFollowSet("E'");
+  G.getTargetFollowSet("T");
+  G.getTargetFollowSet("T'");
+  G.getTargetFollowSet("F");
+  G.getTargetFollowSet("F'");
+  G.getTargetFollowSet("P");
   G.printSets("follow");
+
+  G.getTargetSelectFollowSet("E'", "+E");
+  G.getTargetSelectFollowSet("E'", " ");
+  G.getTargetSelectFollowSet("T'", "T");
+  G.getTargetSelectFollowSet("T'", " ");
+  G.getTargetSelectFollowSet("F'", "*F'");
+  G.getTargetSelectFollowSet("F'", " ");
+  G.printSets("select");
   return 0;
 }
