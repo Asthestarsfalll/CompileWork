@@ -10,6 +10,11 @@
 #define MAX_IDENT_LEN 8
 #define MAX_NUM_LEN 8
 
+class Token;
+class StringList;
+class Lexer;
+void print_info(Token);
+
 enum TokenType {
   INVALID_INDENTIFIER,
   IDENTIFIER,
@@ -20,6 +25,12 @@ enum TokenType {
   LONG_IDENTIFIER,
   LONG_NUMBER,
   END,
+};
+
+enum OperatorType {
+  PLUS,
+  MULTIPY,
+  RELATIONAL,
 };
 
 class Token {
@@ -59,8 +70,8 @@ private:
   std::vector<std::string> strings_;
 };
 
-const StringList opreratorSymbols{"+", "-",  "*",  "/",  "=",  "<",
-                                  ">", "<=", ">=", "<>", ":=", "#"};
+const StringList operatorSymbols{"+", "-",  "*",  "/",  "=",  "<",
+                                 ">", "<=", ">=", "<>", ":=", "#"};
 
 const StringList seperaterSymbols{".", ",", ";", "(", ")"};
 
@@ -78,6 +89,18 @@ std::unordered_map<int, std::string> tokenTypeMapper = {
     {LONG_NUMBER, "无符号整数越界"},
     {LONG_IDENTIFIER, "标识符长度超长"},
 };
+
+std::unordered_map<std::string, int> operatorMapper = {
+    {"+", PLUS},       {"-", PLUS},       {"*", MULTIPY},    {"/", MULTIPY},
+    {"#", RELATIONAL}, {"=", RELATIONAL}, {"<", RELATIONAL}, {"<=", RELATIONAL},
+    {">", RELATIONAL}, {">=", RELATIONAL}};
+
+int dispathOperator(std::string op) {
+  auto it = operatorMapper.find(op);
+  if (it == operatorMapper.end())
+    throw std::runtime_error("Unexpected op name " + it->first);
+  return it->second;
+}
 
 void print_info(Token token) {
   std::cout << '(';
@@ -231,7 +254,7 @@ private:
       return advance(OPERATOR, 2);
     }
     std::string ch_str(1, ch);
-    if (opreratorSymbols.contain(ch_str)) {
+    if (operatorSymbols.contain(ch_str)) {
       return advance(OPERATOR);
     }
     if (seperaterSymbols.contain(ch_str)) {
@@ -271,11 +294,13 @@ int main() {
   }
 
   Lexer lexer(code);
+  std::vector<Token> token_list;
   while (true) {
     TokenType type = lexer.getTokenType();
     if (type == END)
       break;
     auto token = lexer.buildToken(type);
+    token_list.push_back(token);
     print_info(token);
   }
   return 0;
