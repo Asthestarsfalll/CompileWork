@@ -2,6 +2,7 @@
 #include <cctype>
 #include <iostream>
 #include <map>
+#include <queue>
 #include <set>
 #include <stack>
 #include <stdexcept>
@@ -18,6 +19,10 @@
 
 using GrammarInputType =
     std::unordered_map<std::string, std::vector<std::string>>;
+using SetType = std::unordered_map<std::string, std::set<std::string>>;
+using TableType =
+    std::unordered_map<std::string,
+                       std::unordered_map<std::string, std::string>>;
 
 bool HASEPSILON = false;
 
@@ -35,10 +40,17 @@ template <typename T> inline void concat(std::set<T> &v1, std::set<T> &v2) {
 
 inline void filterEspilon(std::set<std::string> &v) { v.erase(Epsilon); }
 
-inline bool isNonterminal(const char name) { return std::isupper(name); }
+inline bool isNonterminal(const char &name) { return std::isupper(name); }
 
 inline std::string ToEpsilon(const std::string var) {
   return var == Epsilon ? "ε" : var;
+}
+
+inline void printSeperater(int size) {
+  for (int i = 0; i < size; i++) {
+    std::cout << "========";
+  }
+  std::cout << std::endl;
 }
 
 template <typename T> inline void getFullName(T &iterator, std::string &name) {
@@ -49,6 +61,26 @@ template <typename T> inline void getFullName(T &iterator, std::string &name) {
   }
 }
 
+inline std::vector<std::string> reverse(std::string inp) {
+  std::stack<std::string> temp;
+  for (auto it = inp.begin(); it != inp.end();) {
+    std::string name = {*it};
+    if (isNonterminal(*it)) {
+      getFullName(it, name);
+    } else {
+      it++;
+    }
+    if (name == " ")
+      continue;
+    temp.push(name);
+  }
+  std::vector<std::string> t;
+  while (!temp.empty()) {
+    t.push_back(temp.top());
+    temp.pop();
+  }
+  return t;
+}
 class Nonterminal {
 public:
   std::string name;
@@ -109,6 +141,7 @@ public:
 
 class Grammar {
 public:
+  std::string start_symbol;
   Grammar(std::string start_symbol, std::vector<Nonterminal> in_nonterminals,
           std::vector<Terminal> in_terminals)
       : start_symbol(start_symbol) {
@@ -168,6 +201,33 @@ public:
       throw std::runtime_error("Unexpected production for Nonterminal " + name);
     return getSelectSet(node, production);
   }
+
+  void getAllSelectFollowSet() {
+    for (auto it = nonterminals.begin(); it != nonterminals.end(); it++) {
+      for (auto s_it = it->second.productions.begin();
+           s_it != it->second.productions.end(); s_it++) {
+        getTargetSelectFollowSet(it->second.name, *s_it);
+      }
+    }
+  }
+
+  friend void buildPredcitTable(Grammar &G, TableType &table) {
+    for (auto it = G.nonterminals.begin(); it != G.nonterminals.end(); it++) {
+      auto node = it->second;
+      for (auto s_it = node.productions.begin(); s_it != node.productions.end();
+           s_it++) {
+        std::set<std::string> temp =
+            G.getTargetSelectFollowSet(node.name, *s_it);
+        for (auto s = temp.begin(); s != temp.end(); s++) {
+          auto t = table[node.name].find(*s);
+          if (t != table[node.name].end())
+            throw std::runtime_error("Not LL(1) Grammar");
+          table[node.name][*s] = *s_it;
+        }
+      }
+    }
+  }
+  std::unordered_map<std::string, Terminal> getTerminal() { return terminals; }
 
   std::set<std::string> getFirstSet(Nonterminal node) {
     auto cache = firstCache.find(node.name);
@@ -277,8 +337,8 @@ public:
       }
     }
     if (generallyToEmpty) {
-        auto temp = getFollowSet(node);
-        concat(selects, temp);
+      auto temp = getFollowSet(node);
+      concat(selects, temp);
     }
     selectCache[node.name + " --> " + production] = selects;
     return selects;
@@ -336,13 +396,27 @@ public:
   };
 
   void printSets(std::string target) {
-    std::cout << target << " set:\n";
+    std::cout << "=============================\n";
+    std::cout << target << " set:\n"
+              << "============================\n";
     if (target == "first") {
       _printSets(firstCache);
     } else if (target == "follow") {
       _printSets(followCache);
     } else if (target == "select") {
       _printSets(selectCache);
+    } else {
+      throw std::runtime_error("Unexpected print mode " + target);
+    }
+  }
+
+  SetType getSet(std::string target) {
+    if (target == "first") {
+      return firstCache;
+    } else if (target == "follow") {
+      return followCache;
+    } else if (target == "select") {
+      return selectCache;
     } else {
       throw std::runtime_error("Unexpected print mode " + target);
     }
@@ -355,9 +429,9 @@ private:
     }
   }
   void _printSet(const std::string name, const std::set<std::string> &s) {
-    std::cout << name << ": { ";
+    std::cout << name << (name.size() == 2 ? "" : " ") << ": { ";
     for (const auto &element : s) {
-      std::cout << ToEpsilon(element) << ", ";
+      std::cout << ToEpsilon(element) << " ";
     }
     std::cout << "}\n";
   }
@@ -406,9 +480,128 @@ private:
 
   std::unordered_map<std::string, Nonterminal> nonterminals;
   std::unordered_map<std::string, Terminal> terminals;
-  std::unordered_map<std::string, std::set<std::string>> firstCache,
-      followCache, selectCache;
-  std::unordered_map<std::string, std::set<std::string>> followLocks;
+  SetType firstCache, followCache, selectCache;
+  SetType followLocks;
+};
+
+class PredictTable {
+public:
+  PredictTable(Grammar &G) {
+    buildPredcitTable(G, table);
+    start_symbol = G.start_symbol;
+    auto t = G.getTerminal();
+    terminals["#"] = 1;
+    for (auto it = t.begin(); it != t.end(); it++) {
+      if (it->first == " ")
+        continue;
+      terminals[it->first] = 1;
+    }
+  }
+
+  void clear_stack() {
+    while (!stack.empty()) {
+      stack.pop();
+    }
+  }
+
+  void setInputs(const std::string str) {
+    for (auto it = str.begin(); it != str.end(); ++it) {
+      inputs.push({*it});
+    }
+    inputs.push("#");
+  }
+
+  void diplayTable() {
+    TableType T(table);
+    printSeperater(terminals.size());
+    std::cout << "PredictTable:\n";
+    printSeperater(terminals.size());
+    std::cout << '\t';
+    for (auto it = terminals.begin(); it != terminals.end(); it++) {
+      std::cout << it->first << "\t";
+    }
+    for (auto i = T.begin(); i != T.end(); i++) {
+      std::cout << '\n' << i->first << "\t";
+      for (auto it = terminals.begin(); it != terminals.end(); it++) {
+        std::cout << ToEpsilon({i->second[it->first]}) << "\t";
+      }
+    }
+    std::cout << '\n';
+  }
+
+  void analysis(bool verbose) {
+    if (inputs.size() == 0)
+      throw std::runtime_error("The size of inputs should be greater than 1.");
+    int step = 1;
+    stack.push("#");
+    stack.push(start_symbol);
+    if (verbose) {
+      printSeperater(6);
+      std::cout << "步骤" << '\t' << "分析栈" << "\t\t" << "输入缓存区" << '\t'
+                << "动作" << std::endl;
+      printSeperater(6);
+    }
+    while (1) {
+      if (verbose) {
+        std::cout << step << '\t';
+        printStack(stack);
+        std::cout << "\t\t";
+        printQueue(inputs);
+        std::cout << "\t\t";
+      }
+      auto temp = inputs.front();
+      auto name = stack.top();
+      if (isNonterminal(name)) {
+        auto it = table[name].find(temp);
+        if (it == table[name].end())
+          throw std::runtime_error("PredictTable wrong!\n");
+        auto str = it->second;
+        if (verbose)
+          std::cout << name << " --> " << str << "\t\n";
+        stack.pop();
+        auto t = reverse(str);
+        for (auto i : t) {
+          stack.push({i});
+        }
+      } else if (name == temp) {
+        if (name == "#") {
+          if (verbose)
+            std::cout << "Accpet"
+                      << "\t\n";
+          break;
+        }
+        stack.pop();
+        inputs.pop();
+        if (verbose)
+          std::cout << "匹配" + name << "\t\n";
+      }
+      step++;
+    }
+  }
+
+private:
+  template <typename T> void printStack(std::stack<T> t) {
+    std::vector<T> temp;
+    while (!t.empty()) {
+      temp.push_back(t.top());
+      t.pop();
+    }
+    for (int i = temp.size() - 1; i >= 0; i--) {
+      std::cout << temp[i];
+    }
+  }
+
+  template <typename T> void printQueue(std::queue<T> q) {
+    while (!q.empty()) {
+      std::cout << q.front();
+      q.pop();
+    }
+  }
+  std::stack<std::string> stack;
+  std::queue<std::string> inputs;
+  std::unordered_map<std::string, std::unordered_map<std::string, std::string>>
+      table;
+  std::unordered_map<std::string, int> terminals;
   std::string start_symbol;
 };
 
@@ -441,6 +634,9 @@ int main(int argc, char *argv[]) {
                              {"F'", {"*F'", " "}},
                              {"P", {"(E)", "a", "b", "/"}}};
   std::string start_symbol = "E";
+  // GrammarInputType inputs = {
+  //     {"S", {"a", "\\", "(T)"}}, {"T", {"ST'"}}, {"T'", {",ST'", Epsilon}}};
+  // std::string start_symbol = "S";
   Grammar G = buildGrammar(start_symbol, inputs);
   std::cout << G;
   G.eliminateLeftRecursion();
@@ -473,12 +669,12 @@ int main(int argc, char *argv[]) {
   G.getTargetFollowSet("P");
   G.printSets("follow");
 
-  G.getTargetSelectFollowSet("E'", "+E");
-  G.getTargetSelectFollowSet("E'", " ");
-  G.getTargetSelectFollowSet("T'", "T");
-  G.getTargetSelectFollowSet("T'", " ");
-  G.getTargetSelectFollowSet("F'", "*F'");
-  G.getTargetSelectFollowSet("F'", " ");
+  G.getAllSelectFollowSet();
+  // auto a = PredictTable(G);
+
   G.printSets("select");
+  // a.diplayTable();
+  // a.setInputs("(a,a)");
+  // a.analysis(true);
   return 0;
 }
