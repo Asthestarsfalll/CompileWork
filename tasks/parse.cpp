@@ -1,5 +1,6 @@
 #include <algorithm>
 #include <cctype>
+#include <cstddef>
 #include <iostream>
 #include <map>
 #include <queue>
@@ -30,7 +31,7 @@ class Nonterminal;
 class Terminal;
 class Grammar;
 
-inline bool isNonterminal(const std::string name) {
+inline bool isNonterminal(const std::string &name) {
   return std::isupper(name[0]);
 }
 
@@ -42,7 +43,7 @@ inline void filterEspilon(std::set<std::string> &v) { v.erase(Epsilon); }
 
 inline bool isNonterminal(const char &name) { return std::isupper(name); }
 
-inline std::string ToEpsilon(const std::string var) {
+inline std::string ToEpsilon(const std::string &var) {
   return var == Epsilon ? "ε" : var;
 }
 
@@ -51,6 +52,12 @@ inline void printSeperater(int size) {
     std::cout << "========";
   }
   std::cout << std::endl;
+}
+
+inline void printTab(int size) {
+  for (int i = 0; i < size; i++) {
+    std::cout << '\t';
+  }
 }
 
 template <typename T> inline void getFullName(T &iterator, std::string &name) {
@@ -81,6 +88,33 @@ inline std::vector<std::string> reverse(std::string inp) {
   }
   return t;
 }
+
+template <typename T>
+inline void assertNotHasKey(const std::string &key,
+                            std::unordered_map<std::string, T> dict) {
+  auto it = dict.find(key);
+  if (it != dict.end())
+    throw std::runtime_error("Already has Key " + key);
+}
+
+template <typename T> inline void printStack(std::stack<T> t) {
+  std::vector<T> temp;
+  while (!t.empty()) {
+    temp.push_back(t.top());
+    t.pop();
+  }
+  for (int i = temp.size() - 1; i >= 0; i--) {
+    std::cout << temp[i];
+  }
+}
+
+template <typename T> inline void printQueue(std::queue<T> q) {
+  while (!q.empty()) {
+    std::cout << q.front();
+    q.pop();
+  }
+}
+
 class Nonterminal {
 public:
   std::string name;
@@ -142,23 +176,25 @@ public:
 class Grammar {
 public:
   std::string start_symbol;
-  Grammar(std::string start_symbol, std::vector<Nonterminal> in_nonterminals,
-          std::vector<Terminal> in_terminals)
+  Grammar(const std::string &start_symbol,
+          std::vector<Nonterminal *> in_nonterminals,
+          std::vector<Terminal *> in_terminals)
       : start_symbol(start_symbol) {
-    for (Nonterminal var : in_nonterminals) {
-      nonterminals[var.name] = var;
+    for (Nonterminal *var : in_nonterminals) {
+      nonterminals[var->name] = var;
     }
-    for (Terminal var : in_terminals) {
-      terminals[var.name] = var;
+    for (Terminal *var : in_terminals) {
+      terminals[var->name] = var;
     }
     analysisIsGenerallyToEmpty();
   };
 
-  Grammar(std::string start_symbol, std::vector<Nonterminal> in_nonterminals,
-          std::unordered_map<std::string, Terminal> in_terminals)
+  Grammar(const std::string &start_symbol,
+          std::vector<Nonterminal *> in_nonterminals,
+          std::unordered_map<std::string, Terminal *> in_terminals)
       : start_symbol(start_symbol) {
-    for (Nonterminal var : in_nonterminals) {
-      nonterminals[var.name] = var;
+    for (Nonterminal *var : in_nonterminals) {
+      nonterminals[var->name] = var;
     }
     terminals = in_terminals;
     analysisIsGenerallyToEmpty();
@@ -168,29 +204,29 @@ public:
     os << "G[" << self.start_symbol << "]: \n";
     for (auto it = self.nonterminals.begin(); it != self.nonterminals.end();
          it++) {
-      os << it->second;
+      os << *it->second;
     }
     return os;
   }
 
-  bool hasNonterminal(std::string name) {
+  bool hasNonterminal(const std::string &name) {
     auto it = nonterminals.find(name);
     if (it != nonterminals.end())
       return true;
     return false;
   }
 
-  std::set<std::string> getTargetFirstSet(std::string name) {
-    return getFirstSet(getTargetNonterminal(name));
+  std::set<std::string> getTargetFirstSet(const std::string &name) {
+    return getFirstSet(*getTargetNonterminal(name));
   }
 
-  std::set<std::string> getTargetFollowSet(std::string name) {
-    return getFollowSet(getTargetNonterminal(name));
+  std::set<std::string> getTargetFollowSet(const std::string &name) {
+    return getFollowSet(*getTargetNonterminal(name));
   }
 
-  std::set<std::string> getTargetSelectFollowSet(std::string name,
-                                                 std::string production) {
-    auto node = getTargetNonterminal(name);
+  std::set<std::string> getTargetSelectSet(const std::string &name,
+                                           const std::string &production) {
+    auto node = *getTargetNonterminal(name);
     bool is_exist = false;
     for (auto it = node.productions.begin(); it != node.productions.end();
          it++) {
@@ -202,11 +238,11 @@ public:
     return getSelectSet(node, production);
   }
 
-  void getAllSelectFollowSet() {
+  void getAllSelectSet() {
     for (auto it = nonterminals.begin(); it != nonterminals.end(); it++) {
-      for (auto s_it = it->second.productions.begin();
-           s_it != it->second.productions.end(); s_it++) {
-        getTargetSelectFollowSet(it->second.name, *s_it);
+      for (auto s_it = it->second->productions.begin();
+           s_it != it->second->productions.end(); s_it++) {
+        getTargetSelectSet(it->second->name, *s_it);
       }
     }
   }
@@ -214,20 +250,21 @@ public:
   friend void buildPredcitTable(Grammar &G, TableType &table) {
     for (auto it = G.nonterminals.begin(); it != G.nonterminals.end(); it++) {
       auto node = it->second;
-      for (auto s_it = node.productions.begin(); s_it != node.productions.end();
-           s_it++) {
-        std::set<std::string> temp =
-            G.getTargetSelectFollowSet(node.name, *s_it);
+      for (auto s_it = node->productions.begin();
+           s_it != node->productions.end(); s_it++) {
+        std::set<std::string> temp = G.getTargetSelectSet(node->name, *s_it);
         for (auto s = temp.begin(); s != temp.end(); s++) {
-          auto t = table[node.name].find(*s);
-          if (t != table[node.name].end())
-            throw std::runtime_error("Not LL(1) Grammar");
-          table[node.name][*s] = *s_it;
+          auto t = table[node->name].find(*s);
+          // if (t != table[node->name].end())
+            // throw std::runtime_error("Not LL(1) Grammar");
+          table[node->name][*s] = *s_it;
         }
       }
     }
   }
-  std::unordered_map<std::string, Terminal> getTerminal() { return terminals; }
+  std::unordered_map<std::string, Terminal *> getTerminal() {
+    return terminals;
+  }
 
   std::set<std::string> getFirstSet(Nonterminal node) {
     auto cache = firstCache.find(node.name);
@@ -240,7 +277,7 @@ public:
         std::string str = {*s_it};
         getFullName<std::string::iterator>(s_it, str);
         if (isNonterminal(str)) {
-          Nonterminal n = getTargetNonterminal(str);
+          Nonterminal n = *getTargetNonterminal(str);
           std::set<std::string> temp = getFirstSet(n);
           concat(firsts, temp);
           if (!n.generallyEmpty)
@@ -264,39 +301,50 @@ public:
     if (target_name == start_symbol)
       follows.insert("#");
     for (auto it = nonterminals.begin(); it != nonterminals.end(); it++) {
-      Nonterminal node = it->second;
+      Nonterminal node = *it->second;
       if (followLocks[target_name].count(node.name))
         continue;
       for (auto prod : node.productions) {
         for (auto s_it = prod.begin(); s_it != prod.end();) {
           std::string name({*s_it});
           getFullName<std::string::iterator>(s_it, name);
-          if (name == target_name) {
-            if (node.name == target_name)
-              continue;
-            std::set<std::string> temp;
-            if (s_it == prod.end() || *s_it == ' ') {
-              followLocks[target_name].insert(node.name);
-              temp = getFollowSet(getTargetNonterminal(node.name));
-              followLocks[target_name].erase(node.name);
-              concat(follows, temp);
-            } else {
+          if (name != target_name)
+            continue;
+          std::set<std::string> temp;
+          if (s_it == prod.end() || *s_it == ' ') {
+            followLocks[target_name].insert(node.name);
+            temp = getFollowSet(*getTargetNonterminal(node.name));
+            followLocks[target_name].erase(node.name);
+            concat(follows, temp);
+          } else {
+            bool generallyToEmpty = true;
+            while (s_it != prod.end()) {
               std::string next_name = std::string({*s_it});
               getFullName<std::string::iterator>(s_it, next_name);
               if (isNonterminal(next_name)) {
-                temp = getFirstSet(getTargetNonterminal({next_name}));
+                temp = getFirstSet(*getTargetNonterminal({next_name}));
                 if (temp.count(Epsilon)) {
                   filterEspilon(temp);
                   concat(follows, temp);
-                  followLocks[target_name].insert(node.name);
-                  temp = getFollowSet(getTargetNonterminal(node.name));
-                  followLocks[target_name].erase(node.name);
+                } else {
+                  concat(follows, temp);
+                  generallyToEmpty = false;
+                  break;
                 }
-                concat(follows, temp);
+                temp.clear();
               } else {
                 follows.insert(next_name);
+                generallyToEmpty = false;
+                break;
               }
             }
+            if (generallyToEmpty and node.name != target_name) {
+              followLocks[target_name].insert(node.name);
+              temp = getFollowSet(*getTargetNonterminal(node.name));
+              followLocks[target_name].erase(node.name);
+              concat(follows, temp);
+            }
+            break;
           }
         }
       }
@@ -304,7 +352,8 @@ public:
     followCache[target_name] = follows;
     return follows;
   };
-  std::set<std::string> getSelectSet(Nonterminal node, std::string production) {
+  std::set<std::string> getSelectSet(Nonterminal node,
+                                     const std::string &production) {
     auto cache = selectCache.find(node.name + " --> " + production);
     if (cache != selectCache.end())
       return cache->second;
@@ -313,9 +362,10 @@ public:
     std::set<std::string> selects;
     for (auto s_it = production.begin(); s_it != production.end();) {
       if (isNonterminal(*s_it)) {
-        auto n = getTargetNonterminal({*s_it});
+        std::string name = {*s_it};
+        getFullName(s_it, name);
+        auto n = *getTargetNonterminal(name);
         auto temp = getFirstSet(n);
-        s_it++;
         if (temp.count(Epsilon)) {
           filterEspilon(temp);
           concat(selects, temp);
@@ -345,33 +395,34 @@ public:
   };
 
   void eliminateLeftRecursion() {
-    std::unordered_map<std::string, Nonterminal> new_nonterminals;
+    std::unordered_map<std::string, Nonterminal *> new_nonterminals;
     for (auto it = nonterminals.begin(); it != nonterminals.end(); it++) {
       const std::string name = it->first;
       const std::string new_name = name + "'";
       std::vector<std::string> target, others;
-      for (std::string str : it->second.productions) {
+      for (std::string str : it->second->productions) {
         if (str.compare(0, 1, name) == 0) {
           target.push_back(str);
         } else {
           others.push_back(str);
         }
       }
-      Nonterminal new_node(new_name), old(name);
+      Nonterminal *new_node = new Nonterminal(new_name),
+                  *old = new Nonterminal(name);
       for (auto n : target) {
-        new_node.addProduction(n.substr(1) + new_name);
+        new_node->addProduction(n.substr(1) + new_name);
       }
       if (target.size() > 0)
         for (auto n : others) {
-          old.addProduction(n + new_name);
+          old->addProduction(n + new_name);
         }
       else
         for (auto n : others) {
-          old.addProduction(n);
+          old->addProduction(n);
         }
       new_nonterminals[name] = old;
-      if (new_node.productions.size() > 0) {
-        new_node.addProduction(Epsilon);
+      if (new_node->productions.size() > 0) {
+        new_node->addProduction(Epsilon);
         new_nonterminals[new_name] = new_node;
       }
     }
@@ -388,14 +439,14 @@ public:
   }
   void removeCommonPrefix() {}
 
-  Nonterminal getTargetNonterminal(const std::string name) {
+  Nonterminal *getTargetNonterminal(const std::string &name) {
     auto it = nonterminals.find(name);
     if (it == nonterminals.end())
       throw std::runtime_error("Unexpected key for nonterminals: " + name);
     return it->second;
   };
 
-  void printSets(std::string target) {
+  void printSets(const std::string &target) {
     std::cout << "=============================\n";
     std::cout << target << " set:\n"
               << "============================\n";
@@ -410,7 +461,7 @@ public:
     }
   }
 
-  SetType getSet(std::string target) {
+  SetType getSet(const std::string &target) {
     if (target == "first") {
       return firstCache;
     } else if (target == "follow") {
@@ -428,7 +479,7 @@ private:
       _printSet(it->first, it->second);
     }
   }
-  void _printSet(const std::string name, const std::set<std::string> &s) {
+  void _printSet(const std::string &name, const std::set<std::string> &s) {
     std::cout << name << (name.size() == 2 ? "" : " ") << ": { ";
     for (const auto &element : s) {
       std::cout << ToEpsilon(element) << " ";
@@ -436,28 +487,29 @@ private:
     std::cout << "}\n";
   }
 
-  std::vector<Nonterminal> getFilteredNodes(std::vector<std::string> targets) {
-    std::vector<Nonterminal> new_list;
+  std::vector<Nonterminal *>
+  getFilteredNodes(std::vector<std::string> targets) {
+    std::vector<Nonterminal *> new_list;
     for (auto var : targets) {
       std::string c = {var[0]};
       if (var[1] == '\'')
         c += "'";
       auto non = getTargetNonterminal(c);
-      if (!non.generallyEmpty)
+      if (!non->generallyEmpty)
         new_list.push_back(non);
     }
     return new_list;
   }
 
-  int analysis(Nonterminal node) {
+  int analysis(Nonterminal *node) {
     bool contain_unknown = false;
     if (!HASEPSILON)
       return FALSE;
-    auto target_nodes = getFilteredNodes(node.getUnknownNonterminal());
+    auto target_nodes = getFilteredNodes(node->getUnknownNonterminal());
     if (target_nodes.size() == 0)
       return KEEP;
     for (auto non : target_nodes) {
-      if (non.generallyEmpty == UNKNOWN) {
+      if (non->generallyEmpty == UNKNOWN) {
         int res = analysis(non);
         if (res == TRUE)
           return TRUE;
@@ -474,12 +526,12 @@ private:
     for (auto it = nonterminals.begin(); it != nonterminals.end(); it++) {
       int res = analysis(it->second);
       if (res != KEEP)
-        it->second.generallyEmpty = res;
+        it->second->generallyEmpty = res;
     }
   }
 
-  std::unordered_map<std::string, Nonterminal> nonterminals;
-  std::unordered_map<std::string, Terminal> terminals;
+  std::unordered_map<std::string, Nonterminal *> nonterminals;
+  std::unordered_map<std::string, Terminal *> terminals;
   SetType firstCache, followCache, selectCache;
   SetType followLocks;
 };
@@ -504,7 +556,7 @@ public:
     }
   }
 
-  void setInputs(const std::string str) {
+  void setInputs(const std::string &str) {
     for (auto it = str.begin(); it != str.end(); ++it) {
       inputs.push({*it});
     }
@@ -535,10 +587,12 @@ public:
     int step = 1;
     stack.push("#");
     stack.push(start_symbol);
+    // auto tree = Tree(start_symbol);
     if (verbose) {
       printSeperater(6);
-      std::cout << "步骤" << '\t' << "分析栈" << "\t\t" << "输入缓存区" << '\t'
-                << "动作" << std::endl;
+      std::cout << "步骤" << '\t' << "分析栈"
+                << "\t\t"
+                << "输入缓存区" << '\t' << "动作" << std::endl;
       printSeperater(6);
     }
     while (1) {
@@ -580,23 +634,6 @@ public:
   }
 
 private:
-  template <typename T> void printStack(std::stack<T> t) {
-    std::vector<T> temp;
-    while (!t.empty()) {
-      temp.push_back(t.top());
-      t.pop();
-    }
-    for (int i = temp.size() - 1; i >= 0; i--) {
-      std::cout << temp[i];
-    }
-  }
-
-  template <typename T> void printQueue(std::queue<T> q) {
-    while (!q.empty()) {
-      std::cout << q.front();
-      q.pop();
-    }
-  }
   std::stack<std::string> stack;
   std::queue<std::string> inputs;
   std::unordered_map<std::string, std::unordered_map<std::string, std::string>>
@@ -605,76 +642,517 @@ private:
   std::string start_symbol;
 };
 
-Grammar buildGrammar(std::string start_symbol, GrammarInputType nonterminals) {
-  std::vector<Nonterminal> targets;
-  std::unordered_map<std::string, Terminal> terms;
+class Item {
+public:
+  std::string next;
+  Nonterminal *non;
+  int idx, prod_idx;
+  Item(Nonterminal *non, int idx, int prod_idx)
+      : idx(idx), non(non), prod_idx(prod_idx) {
+    auto prod = non->productions;
+    if (prod_idx >= prod.size())
+      throw std::runtime_error("[ITEM]: Production Index Error");
+    if (idx > prod[prod_idx].size())
+      throw std::runtime_error("[ITEM]: String Index Error");
+    if (idx < prod[prod_idx].size())
+      next = prod[prod_idx][idx];
+    else
+      next = Invalid;
+    if (idx < prod[prod_idx].size() &&
+        non->productions[prod_idx][idx + 1] == '\'') {
+      next += "'";
+      idx++;
+    }
+    if (next == " ")
+      next = Invalid;
+  };
+
+  friend std::ostream &operator<<(std::ostream &os, Item &self) {
+    os << self.getProduction();
+    return os;
+  }
+
+  Item *toNext() {
+    if (next == Invalid || next == " ")
+      throw std::runtime_error("toNext Wrong!");
+    return new Item(non, idx + next.size(), prod_idx);
+  }
+
+  std::string getProduction() {
+    std::string prods;
+    prods = non->name + " --> ";
+    auto target = non->productions[prod_idx];
+    for (size_t i = 0; i < target.size(); i++) {
+      if (i == idx)
+        prods += "・";
+      prods += target[i];
+    }
+    if (idx == target.size()) {
+      prods += "・";
+    }
+    return prods;
+  }
+
+  bool operator==(const Item &other) const {
+    return (non->name == other.non->name && idx == other.idx &&
+            prod_idx == other.prod_idx);
+  }
+
+  size_t hash() const {
+    size_t h1 = std::hash<std::string>{}(non->name);
+    size_t h2 = std::hash<int>{}(idx);
+    size_t h3 = std::hash<int>{}(prod_idx);
+    return h1 ^ (h2 << 1) ^ (h3 << 2);
+  }
+};
+
+class ItemSet : public std::vector<Item *> {
+public:
+  ItemSet(){};
+  ItemSet(Item *i) { push_back(i); }
+  ItemSet(std::initializer_list<Item *> init_list) {
+    for (auto i : init_list) {
+      push_back(i);
+    }
+  }
+
+  std::vector<Item *> getTargetItems(const std::string &name) {
+    std::vector<Item *> set;
+    for (size_t i = 0; i < size(); i++) {
+      auto t = at(i);
+      if (t->non->name == name)
+        set.push_back(t);
+    }
+    return set;
+  }
+
+  void push_back(Item *item) {
+    if (item->next == Invalid || item->next == " ") {
+      hasReduce = true;
+    } else {
+      hasShift = true;
+    }
+    nextItems[item->next].push_back(size());
+    std::vector<Item *>::push_back(item);
+  }
+
+  std::unordered_map<std::string, std::vector<size_t>> getNexts() {
+    std::unordered_map<std::string, std::vector<size_t>> temp;
+    for (auto it = nextItems.begin(); it != nextItems.end(); it++) {
+      temp[it->first] = it->second;
+    }
+    return temp;
+  }
+
+  friend std::ostream &operator<<(std::ostream &os, const ItemSet &self) {
+    printSeperater(3);
+    for (size_t i = 0; i < self.size(); i++) {
+      os << "|| " << *self[i] << std::endl;
+    }
+    printSeperater(3);
+    return os;
+  };
+
+  bool hasConflict() { return hasShift && hasReduce; }
+
+  bool operator==(const ItemSet &other) const {
+    if (size() != other.size())
+      return false;
+    for (auto i : other) {
+      bool t = false;
+      for (auto j : *this) {
+        if (*i == *j) {
+          t = true;
+          break;
+        }
+      }
+      if (!t)
+        return false;
+    }
+    return true;
+  }
+
+private:
+  std::unordered_map<std::string, std::vector<size_t>> nextItems;
+  bool hasShift = false, hasReduce = false;
+};
+
+class ItemHash {
+public:
+  size_t operator()(const Item &item) const { return item.hash(); }
+};
+
+class SLRParser {
+public:
+  SLRParser(Grammar *G) : grammar(G), global_idx(0) {
+    buildItemSets();
+    ter.insert("#");
+  };
+
+  void traceItemSets(ItemSet &set) {
+    int last_set = set.size();
+    std::unordered_map<Item, int, ItemHash> cache;
+    while (1) {
+      auto nexts = set.getNexts();
+      for (auto it = nexts.begin(); it != nexts.end(); it++) {
+        auto name = it->first;
+        if (!isNonterminal(name) || name == Invalid || name == " ")
+          continue;
+        auto non = grammar->getTargetNonterminal(name);
+        for (int i = 0; i < non->productions.size(); i++) {
+          auto t = new Item(non, 0, i);
+          auto iter = cache.find(*t);
+          if (iter == cache.end()) {
+            set.push_back(t);
+            cache[*t] = global_idx;
+          }
+        }
+      }
+      if (set.size() == last_set)
+        break;
+      last_set = set.size();
+    }
+  }
+
+  int searchAll(ItemSet *set) {
+    int a = 0;
+    for (auto i : itemSets) {
+      if (*set == *i)
+        return a;
+      a++;
+    }
+    return -1;
+  }
+
+  void getNextItemSet(ItemSet &set) {
+    auto outports = set.getNexts();
+    std::unordered_map<std::string, int> gos;
+    std::unordered_map<std::string, std::pair<std::string, int>> acts;
+    for (auto it = outports.begin(); it != outports.end(); it++) {
+      auto new_set = new ItemSet();
+      auto output_name = it->first;
+      auto indices = it->second;
+      for (auto idx : indices) {
+        if (output_name == Invalid || output_name == " ") {
+          auto item = set[idx];
+          auto follow_set = grammar->getTargetFollowSet(item->non->name);
+          for (auto follow : follow_set) {
+            if (item->non->name == grammar->start_symbol) {
+              acts[follow] = {"ACC", -1};
+            } else {
+              auto e = acts.find(follow);
+              if (e != acts.end())
+                throw std::runtime_error("Not SLR Grammar");
+              acts[follow] = {"R" + item->non->name, item->prod_idx};
+            }
+          }
+          continue;
+        }
+        auto t = set[idx]->toNext();
+        new_set->push_back(t);
+        if (isNonterminal(output_name)) {
+          non.insert(output_name);
+          gos[output_name] = itemSets.size();
+        } else {
+          ter.insert(output_name);
+          auto e = acts.find(output_name);
+          if (e != acts.end())
+            throw std::runtime_error("Not SLR Grammar");
+          acts[output_name] = {"S", itemSets.size()};
+        }
+      }
+      int a = searchAll(new_set);
+      if (a == -1 && new_set->size() > 0) {
+        itemSets.push_back(new_set);
+      } else {
+        if (isNonterminal(output_name))
+          gos[output_name] = a;
+        else
+          acts[output_name] = {"S", a};
+      }
+    }
+    GOTOs.push_back(gos);
+    ACTIONs.push_back(acts);
+  }
+
+  void buildItemSets() {
+    std::string target_name = grammar->start_symbol;
+    auto non = grammar->getTargetNonterminal(target_name);
+    std::unordered_map<std::string, int> trace_cache;
+    auto t = new Item(non, 0, 0);
+    auto it = new ItemSet(t);
+    itemSets.push_back(it);
+    routh[*t] = 0;
+    while (global_idx < itemSets.size()) {
+      auto cur_itemset = itemSets[global_idx];
+      traceItemSets(*cur_itemset);
+      std::cout << global_idx << "\n" << *cur_itemset;
+      getNextItemSet(*cur_itemset);
+      global_idx++;
+    }
+  }
+
+  void displayACTIONs() {
+    std::cout << '\t';
+    for (auto name : ter)
+      std::cout << name << "\t";
+    std::cout << std::endl;
+    int i = 0;
+    for (auto line : ACTIONs) {
+      std::cout << i << '\t';
+      i++;
+      for (auto name : ter) {
+        auto it = line.find(name);
+        if (it != line.end())
+          std::cout << it->second.first << it->second.second;
+        else
+          std::cout << Epsilon;
+        std::cout << "\t";
+      }
+      std::cout << std::endl;
+    }
+  }
+
+  void displayGOTOs() {
+    std::cout << '\t';
+    for (auto name : non)
+      std::cout << name << "\t";
+    std::cout << std::endl;
+    int i = 0;
+    for (auto line : GOTOs) {
+      std::cout << i << '\t';
+      i++;
+      for (auto name : non) {
+        auto it = line.find(name);
+        if (it != line.end())
+          std::cout << it->second;
+        else
+          std::cout << Epsilon;
+        std::cout << "\t";
+      }
+      std::cout << std::endl;
+    }
+  }
+
+  void displayRouth() {
+    for (auto it = routh.begin(); it != routh.end(); it++) {
+      auto item = it->first;
+      int next = it->second;
+      std::cout << item.getProduction() << ": " << next << std::endl;
+    }
+  }
+
+  void setInputs(const std::string &str) {
+    for (auto it = str.begin(); it != str.end();) {
+      std::string name = {*it};
+      getFullName(it, name);
+      inputs.push(name);
+    }
+    inputs.push("#");
+  }
+  template <typename T> void popn(std::stack<T> &s, int size) {
+    for (int i = 0; i < size; i++)
+      s.pop();
+  }
+
+  void analysis(bool verbose) {
+    std::cout << "步骤\t"
+              << "状态栈\t\t"
+              << "符号栈\t\t"
+              << "输入串\t\t"
+              << "分析动作\t"
+              << "下一状态\t" << std::endl;
+
+    int step = 1;
+    stack.push("#");
+    status.push(0);
+    while (1) {
+      std::string next_status = Epsilon;
+      if (verbose) {
+        std::cout << step << '\t';
+        printStack(status);
+        std::cout << "\t\t";
+        printStack(stack);
+        std::cout << "\t\t";
+        printQueue(inputs);
+        std::cout << "\t\t";
+      }
+      int top = status.top();
+      auto cur_itemset = itemSets[top];
+      std::string inp = inputs.front();
+      auto action = ACTIONs[top][inp];
+      if (action.first == "S") {
+        status.push(action.second);
+        inputs.pop();
+        stack.push(inp);
+      } else {
+        if (action.second == -1)
+          break;
+        auto name = {action.first[1]};
+        auto prod =
+            grammar->getTargetNonterminal(name)->productions[action.second];
+        if (prod == " ")
+          prod = "";
+        popn(status, prod.size());
+        popn(stack, prod.size());
+        stack.push(name);
+        auto gos = GOTOs[status.top()];
+        auto it = gos.find(name);
+        if (it != gos.end()) {
+          next_status = std::to_string(gos[name]);
+          status.push(gos[name]);
+        }
+      }
+      if (verbose) {
+        std::cout << action.first << action.second << "\t\t";
+        std::cout << next_status << std::endl;
+      }
+      step++;
+    }
+    std::cout << "ACC";
+  }
+
+private:
+  std::vector<ItemSet *> itemSets;
+  std::unordered_map<Item, int, ItemHash> routh;
+  std::unordered_map<Item, std::unordered_map<int, int>, ItemHash> candidates;
+  std::vector<std::unordered_map<std::string, std::pair<std::string, int>>>
+      ACTIONs;
+  std::vector<std::unordered_map<std::string, int>> GOTOs;
+  std::stack<std::string> stack;
+  std::stack<int> status;
+  std::queue<std::string> inputs;
+  std::set<std::string> non, ter;
+  int global_idx;
+  Grammar *grammar;
+};
+
+Grammar *buildGrammar(const std::string &start_symbol,
+                      GrammarInputType &nonterminals) {
+  std::vector<Nonterminal *> targets;
+  std::unordered_map<std::string, Terminal *> terms;
   for (auto it = nonterminals.begin(); it != nonterminals.end(); it++) {
-    Nonterminal temp(it->first);
+    Nonterminal *temp = new Nonterminal(it->first);
     for (std::string prod : it->second) {
       for (auto s_it = prod.begin(); s_it != prod.end(); s_it++) {
         char c = *s_it;
         if (!isNonterminal(c))
-          terms[{c}] = Terminal({c});
+          terms[{c}] = new Terminal({c});
       }
-      temp.addProduction(prod);
+      temp->addProduction(prod);
     }
     targets.push_back(temp);
   }
-  return Grammar(start_symbol, targets, terms);
+  auto g = new Grammar(start_symbol, targets, terms);
+  return g;
+}
+
+Grammar *getGrammer() {
+  std::string start_symbol = "Z";
+  GrammarInputType nonterminals = {
+      {"Z", {"P"}},
+      {"P", {"P'."}},
+      {"P'", {"A'BB'S"}},
+      {"A'", {"I", Epsilon}},
+      {"B", {"V", Epsilon}},
+      {"B'", {"I'", Epsilon}},
+      {"I", {"CDF';"}},
+      {"F'", {",DF'", Epsilon}},
+      {"D", {"b=n"}},
+      {"V", {"vbG;"}},
+      {"G", {",bG", Epsilon}},
+      // {"I'", {"AP'G'"}},
+      // {"G'", {";I'G'", Epsilon}},
+      {"I'", {"G'"}},
+      {"G'", {"AP'", Epsilon}},
+      {"A", {"pb;"}},
+      {"S", {"S'", "C", "W", "V'", "H", "D'", "F", "E'"}},
+      {"S'", {"bxE"}},
+      {"F", {"sSH'e"}},
+      {"H'", {";SH'", Epsilon}},
+      {"E'", {Epsilon}},
+      {"C'", {"ERE", "oE"}},
+      {"E", {"JTJ'"}},
+      {"J", {"+", "-", Epsilon}},
+      {"J'", {"LTJ'", Epsilon}},
+      {"T", {"T'K"}},
+      {"K", {"MT'K", Epsilon}},
+      {"T'", {"b", "n", "(E)"}},
+      {"L", {"+", "-"}},
+      {"M", {"*", "/"}},
+      {"R", {"~", "<", "l", "g", ">", "="}},
+      {"C", {"iC'tS"}},
+      {"V'", {"rb"}},
+      {"W", {"wC'dS"}},
+      {"H", {"c(bK')"}},
+      {"K'", {",bK'", Epsilon}},
+      {"D'", {"z(bK')"}}};
+  return buildGrammar(start_symbol, nonterminals);
 }
 
 int main(int argc, char *argv[]) {
   // GrammarInputType inputs = {{"S", {"a", "/", "(T)"}}, {"T", {"T,S",
   // "S"}}}; std::string start_symbol = "S";
-  GrammarInputType inputs = {{"E", {"TE'"}},
-                             {"E'", {"+E", " "}},
-                             {"T", {"FT'"}},
-                             {"T'", {"T", " "}},
-                             {"F", {"PF'"}},
-                             {"F'", {"*F'", " "}},
-                             {"P", {"(E)", "a", "b", "/"}}};
-  std::string start_symbol = "E";
+  // GrammarInputType inputs = {{"E", {"TE'"}},
+  //                            {"E'", {"+E", " "}},
+  //                            {"T", {"FT'"}},
+  //                            {"T'", {"T", " "}},
+  //                            {"F", {"PF'"}},
+  //                            {"F'", {"*F'", " "}},
+  //                            {"P", {"(E)", "a", "b", "/"}}};
+  // std::string start_symbol = "E";
   // GrammarInputType inputs = {
-  //     {"S", {"a", "\\", "(T)"}}, {"T", {"ST'"}}, {"T'", {",ST'", Epsilon}}};
+  //     {"S", {"a", "\\", "(T)"}}, {"T", {"ST'"}}, {"T'", {",ST'",
+  //     Epsilon}}};
   // std::string start_symbol = "S";
-  Grammar G = buildGrammar(start_symbol, inputs);
-  std::cout << G;
-  G.eliminateLeftRecursion();
-  std::cout << G;
-  // G.getFirstSet(G.getTargetNonterminal("S"));
-  // G.getFirstSet(G.getTargetNonterminal("T'"));
-  // G.getFirstSet(G.getTargetNonterminal("T"));
+
+  Grammar G = *getGrammer();
+
+  // G.getTargetFirstSet("E");
+  // G.getTargetFirstSet("E'");
+  // G.getTargetFirstSet("T");
+  // G.getTargetFirstSet("T'");
+  // G.getTargetFirstSet("F");
+  // G.getTargetFirstSet("F'");
+  // G.getTargetFirstSet("P");
   // G.printSets("first");
 
-  // G.getFollowSet(G.getTargetNonterminal("S"));
-  // G.getFollowSet(G.getTargetNonterminal("T'"));
-  // G.getFollowSet(G.getTargetNonterminal("T"));
+  // G.getTargetFollowSet("E");
+  // G.getTargetFollowSet("E'");
+  // G.getTargetFollowSet("T");
+  // G.getTargetFollowSet("T'");
+  // G.getTargetFollowSet("F");
+  // G.getTargetFollowSet("F'");
+  // G.getTargetFollowSet("P");
   // G.printSets("follow");
 
-  G.getTargetFirstSet("E");
-  G.getTargetFirstSet("E'");
-  G.getTargetFirstSet("T");
-  G.getTargetFirstSet("T'");
-  G.getTargetFirstSet("F");
-  G.getTargetFirstSet("F'");
-  G.getTargetFirstSet("P");
-  G.printSets("first");
-
-  G.getTargetFollowSet("E");
-  G.getTargetFollowSet("E'");
-  G.getTargetFollowSet("T");
-  G.getTargetFollowSet("T'");
-  G.getTargetFollowSet("F");
-  G.getTargetFollowSet("F'");
-  G.getTargetFollowSet("P");
-  G.printSets("follow");
-
-  G.getAllSelectFollowSet();
+  // G.getAllSelectSet();
+  // G.printSets("select");
   // auto a = PredictTable(G);
 
-  G.printSets("select");
   // a.diplayTable();
   // a.setInputs("(a,a)");
   // a.analysis(true);
+
+  // GrammarInputType inputs = {{"S", {"A"}}, {"A", {"aAd", "aAb", Epsilon}}};
+  // std::string start_symbol = "S";
+  // GrammarInputType inputs = {{"S'", {"S"}},
+  //                            {"S", {"L.L", "L"}},
+  //                            {"L", {"LB", "B"}},
+  //                            {"B", {"0", "1"}}};
+  // std::string start_symbol = "S'";
+  // Grammar G = *buildGrammar(start_symbol, inputs);
+  std::cout << G;
+  // auto slr = SLRParser(&G);
+  // slr.setInputs("101.110");
+  // slr.displayRouth();
+  // slr.displayACTIONs();
+  // slr.displayGOTOs();
+  // slr.analysis(true);
+
+  auto a = PredictTable(G);
+  a.diplayTable();
+  a.setInputs("b=n.");
+  a.analysis(true);
   return 0;
 }
