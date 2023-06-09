@@ -328,7 +328,21 @@ return 单词
 
 代码如下
 
-```
+```c
+%{
+#include <stdio.h>
+#include <string.h>
+
+int line_number = 1;
+%}
+
+%%
+[a-zA-Z][a-zA-Z0-9]*  { printf("%s 单词\n", yytext); }
+[0-9]+               { printf("%s 数字\n", yytext); }
+[ \t]                { /* ignore whitespace */ }
+.                    { printf("%c 符号\n", yytext[0]); }
+\n                   { line_number++; }
+%%
 
 ```
 
@@ -415,7 +429,38 @@ int main() {
 
 
 
+## PL/0语言
+
+### 介绍
+
+PL/0是一种基于堆栈的编程语言，用于教学和学术研究。它最初由尼古拉斯·维尔特（Niklaus Wirth）在20世纪60年代设计，是他在开发Pascal编程语言之前所创建的。
+
+PL/0具有简单的语法结构和一组基本的控制结构。它支持整数和布尔类型，以及基本的算术和逻辑运算符。PL/0的代码是按照过程结构组织的，并且可以通过一个称为“块”的机制实现局部变量。
+
+PL/0编译器可以将PL/0代码编译成目标代码，可以通过虚拟机或实际硬件来执行。尽管不常用于实际生产环境中，但PL/0仍然被广泛用于编译原理和编程语言教育领域，因为它展示了编译器的基本工作原理。
+
+### 扩展巴克斯范式
+
+**扩展巴克斯范式（Extended Backus-Naur Form,EBNF）是程序语言语法描述的一种形式**，其所使用的元符号如下标所示：
+
+| **元符号** | **含义**                                                     |
+| ---------- | ------------------------------------------------------------ |
+| <>         | 用尖括号括起来的中文字表示语法构造成分，或称语法单位，为非终结符；而用尖括号括起来的英文字表示一类词法单元。 |
+| ::=        | 表示左部的语法单位由右部定义，可读作“定义为”。               |
+| \|         | 表示“或”，即左部可由多个右部定义。                           |
+| { }        | 用花括号括起来的成分可以重复0次到任意多次。                  |
+| [ ]        | 用方括号括起来的成分为任选项，即出现一次或不出现。           |
+| ( )        | 用圆括号括起来的成分优先。                                   |
+
 ## 词法分析
+
+PL/0的单词可以划分为5个大类：保留字（关键字）、标识符、运算符、无符号整数和界符。具体如下：
+
+（1）保留字：共有13个，包括 const , var , procedure , begin , end , odd , if , then , call , while , do , read , write 。
+（2）运算符：共有11个，包括4个整型算数运算符号 + 、 - 、 * 和 / ，6个比较运算符号 < 、 <= 、 > 、 >= 、 # 和 = ，1个赋值运算符 := 。
+（3）界符：共有5个，包括 ( 、 ) 、 , 、 ; 和 . 。
+（4）无符号整数：<integer>是由一个或多个数字组成的序列，数字为 0 , 1 , 2 , … , 9 。
+（5）标识符：<id>是字母开头的字母数字序列，字母包括大小写英文字母： a , b , ..., z , A , B , …, Z 。
 
 ### 任务要求
 
@@ -603,7 +648,198 @@ end.
 (界符,.)
 ```
 
+### 代码实现
+
+定义Token的类别：
+
+```cpp
+enum TokenType {
+  INVALID_INDENTIFIER,
+  IDENTIFIER,
+  NUMBER,
+  RESERVED_WORD,
+  OPERATOR,
+  SEPERATER,
+  LONG_IDENTIFIER,
+  LONG_NUMBER,
+  END,
+};
+
+```
+
+Token类
+
+```cpp
+class Token {
+public:
+  TokenType type;
+  Token(const std::string &str, TokenType type)
+      : lexeme(str), lineno(-1), type(type) {}
+  Token(const std::string &str, TokenType type, int lineno)
+      : lexeme(str), lineno(lineno), type(type) {}
+
+  std::string getLexemeString() const { return lexeme; }
+
+  int getLineno() { return lineno; }
+
+private:
+  std::string lexeme;
+  int lineno;
+};
+
+```
+
+工具类StringList，用于存放字符串并判断给定字符串是否在其中。
+
+```cpp
+class StringList {
+public:
+  StringList(std::initializer_list<std::string> init_list)
+      : strings_(init_list) {}
+
+  void add(const std::string &str) { strings_.push_back(str); }
+
+  bool contain(const std::string &target) const {
+    for (const auto &s : strings_) {
+      if (s == target) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+private:
+  std::vector<std::string> strings_;
+};
+```
+
+将单词分为三类——操作符、分隔符、保留字
+
+```cpp
+const StringList opreratorSymbols{"+", "-",  "*",  "/",  "=",  "<",
+                                  ">", "<=", ">=", "<>", ":=", "#"};
+
+const StringList seperateeSymbols{".", ",", ";", "(", ")"};
+
+const StringList reservedWords{"const", "var",   "procedure", "begin", "end",
+                               "if",    "then",  "while",     "do",    "call",
+                               "read",  "write", "odd"};
+
+```
+
+工具函数，用于将Token打印为需要的格式：
+
+```cpp
+void print_info(Token token) {
+  std::cout << '(';
+  std::cout << tokenTypeMapper[token.type] << ',' << token.getLexemeString();
+  int lineno = token.getLineno();
+  if (lineno >= 0)
+    std::cout << ',' << "行号:" << lineno;
+  std::cout << ")" << std::endl;
+};
+```
+
+Lexer类，用于词法分析，接收一个代码字符串，拥有属性pose、cur_lineno、lineno、lexemeString，
+
 ## 语法分析
+
+### PL/0语言语法的EBNF描述
+
+改写符号
+
+| PL/0语法单位   | EBNF描述                                                     | 改写符号 |
+| -------------- | ------------------------------------------------------------ | -------- |
+| <程序>         | ::=<分程序>.                                                 | P        |
+| <分程序>       | ::=\[<常量说明部分>\]\[<变量说明部分>][<过程说明部分>]<语句> | P'       |
+| <常量说明部分> | ::=const<常量定义>{,<常量定义>};                             | I        |
+| <常量定义>     | ::=<标识符>=<无符号整数>                                     | D        |
+| <变量说明部分> | ::=var<标识符>{,<标识符>};                                   | V        |
+| <过程说明部分> | ::=<过程首部><分程序>{;<过程说明部分>};   \|\|   {<过程首部><分程序>;} | I'       |
+| <过程首部>     | ::=procedure<标识符>;                                        | A        |
+| <语句>         | ::=<赋值语句>\|<条件语句>\|<当型循环语句>\|<过程调用语句>\|<读语句>\|<写语句>\|<复合语句>\|<空语句> | S        |
+| <赋值语句>     | ::=<标识符>:=<表达式>                                        | S'       |
+| <复合语句>     | ::=begin<语句>{;<语句>}end                                   | F        |
+| <空语句>       | ::=ɛ                                                         | E'       |
+| <条件>         | ::=<表达式><关系运算符><表达式>\|odd<表达式>                 | C'       |
+| <表达式>       | ::=[+\|-]<项>{<加减运算符><项>}                              | E        |
+| <项>           | ::=<因子>{<乘除运算符><因子>}                                | T        |
+| <因子>         | ::=<标识符>\|<无符号整数>\|’（’<表达式>’）’                  | T'       |
+| <加减运算符>   | ::=+\|-                                                      | L        |
+| <乘除运算符>   | ::=*\|/                                                      | M        |
+| <关系运算符>   | ::==\|#\|<\|<=\|>\|>=                                        | R        |
+| <条件语句>     | ::=if<条件>then<语句>                                        | C        |
+| <过程调用语句> | ::=call<标识符>                                              | V'       |
+| <当型循环语句> | ::=while<条件>do<语句>                                       | W        |
+| <读语句>       | ::=read’（’<标识符>{,<标识符>}’）’                           | H        |
+| <写语句>       | ::=write’（’<表达式>{,<表达式>}’）’                          | D'       |
+
+改写其余符号：
+
+|              |      |
+| ------------ | ---- |
+| <标识符>     | b    |
+| <无符号整数> | n    |
+| const        | c    |
+| var          | v    |
+| procedure    | p    |
+| begin        | s    |
+| end          | e    |
+| if           | i    |
+| then         | t    |
+| call         | r    |
+| while        | w    |
+| do           | d    |
+| read         | y    |
+| write        | z    |
+| #            | ~    |
+| >=           | g    |
+| <=           | l    |
+| :=           | x    |
+| odd          | o    |
+
+改写产生式：
+
+|      |                                          |
+| ---- | ---------------------------------------- |
+| P    | P'.                                      |
+| P'   | IVI'S                                    |
+| I    | cDA' \| ε                                |
+| D    | b=n \| ε                                 |
+| V    | vbB' \| ε                                |
+| A'   | ,DA' \| ε                                |
+| B'   | ,bB' \| ε                                |
+| I'   | AP'Z                                     |
+| Z    | ;I'Z \| ε                                |
+| A    | pb                                       |
+| S    | S' \| C \| W \| V' \| C \| D' \| F \| E' |
+| S'   | bxE                                      |
+| F    | bSYe                                     |
+| Y    | ;SY \| ε                                 |
+| E'   | ε                                        |
+| C'   | ERE \| oE                                |
+| E    | XTX'                                     |
+| X    | + \| - \| ε                              |
+| X'   | +TX' \| -TX' \| ε                        |
+| T    | T'Y'                                     |
+| Y'   | MY' \| ε                                 |
+| T'   | b \| n \| (E)                            |
+| L    | + \| -                                   |
+| M    | * \| /                                   |
+| R    | = \| ~ \| < \| l \| > \| g               |
+| C    | iC'tS                                    |
+| V'   | rb                                       |
+| W    | wC'dS                                    |
+| C    | c(bU)                                    |
+| D'   | z(EU')                                   |
+| U    | ,bU \| ε                                 |
+| U'   | ,EU' \| ε                                |
+|      |                                          |
+|      |                                          |
+
+
+
+### 任务要求
 
 基于第二章的词法分析程序，使用C/C++语言编写PL/0编译程序的语法分析程序。
 
@@ -618,6 +854,22 @@ procedure p;
         begin
             c := b + a;
         end;
+
+begin
+    read(b);
+    while b # 0 do
+        begin
+            call p;
+            write(2 * c);
+            read(b);
+        end;
+end.
+```
+
+```c
+const a = 10;
+var   b, c;
+
 begin
     read(b);
     while b # 0 do
@@ -761,6 +1013,33 @@ begin
 end.
 ```
 
+
+
+```pascal
+const a := 10;
+var   b, c d;
+
+//单行注释
+
+/*
+* 多行注释
+*/
+
+procedure procedure fun1;
+    if a <= 10 
+        begin
+            c := b + a;
+        end;
+begin
+        begin
+            call fun1;
+            read(b);
+        end;
+end.
+```
+
+
+
 ```shell
 (语法错误,行号:1)
 (语法错误,行号:2)
@@ -770,5 +1049,191 @@ end.
 (语法错误,行号:16)
 (语法错误,行号:17)
 (语法错误,行号:20)
+```
+
+## 语义分析
+
+### 任务要求
+
+```pascal
+const a = 10;
+var   b, c;
+
+//单行注释
+
+/*
+* 多行注释
+*/
+
+procedure p;
+    if a <= 10 then
+        begin
+            c := b + a;
+        end;
+begin
+    read(b);
+    while b # 0 do
+        begin
+            call p;
+            write(2 * c);
+            read(b);
+        end;
+end.
+```
+
+```shell
+语义正确
+中间代码:
+(1)(syss,_,_,_)
+(2)(const,a,_,_)
+(3)(=,10,_,a)
+(4)(var,b,_,_)
+(5)(var,c,_,_)
+(6)(procedure,p,_,_)
+(7)(j<=,a,10,$8)
+(8)(+,b,a,c)
+(9)(ret,_,_,_)
+(10)(read,b,_,_)
+(11)(j#,b,0,$13)
+(12)(j=,b,0,$17)
+(13)(call,p,_,_)
+(14)(*,2,c,T1)
+(15)(write,T1,_,_)
+(16)(read,b,_,_)
+(17)(syse,_,_,_)
+符号表:
+const a 10
+var b 0
+var c 0
+procedure p
+```
+
+
+
+```pascal
+const a = 10;
+var   a, b, c;
+procedure p;
+    if a <= 10 then
+        begin
+            c := b + a;
+        end;
+begin
+    read(b);
+    while b # 0 do
+        begin
+            call p;
+            write(2 * c);
+            read(b);
+        end;
+end.
+```
+
+
+
+```shell
+(语义错误,行号:2)
+```
+
+
+
+```pascal
+const a = 10;
+var   b, c;
+
+//单行注释
+
+/*
+* 多行注释
+*/
+
+procedure p;
+    if a <= 10 then
+        begin
+            c := b + a;
+        end;
+begin
+    read(p);
+    while b # 0 do
+        begin
+            call p;
+            write(2 * c);
+            read(b);
+        end;
+end.
+```
+
+
+
+```shell
+(语义错误,行号:16)
+```
+
+
+
+```pascal
+const a = 10;
+var   b, c;
+
+//单行注释
+
+/*
+* 多行注释
+*/
+
+procedure p;
+    if a <= 10 then
+        begin
+            c := b + a;
+        end;
+begin
+    read(p);
+    while b # 0 do
+        begin
+            call q;
+            write(2 * c);
+            read(b);
+        end;
+end.
+```
+
+```shell
+(语义错误,行号:19)
+```
+
+
+
+```pascal
+const a = 10;
+var   a, b, c;
+
+//单行注释
+
+/*
+* 多行注释
+*/
+procedure p;
+    if a <= 10 then
+        begin
+            c := b + a;
+        end;
+begin
+    read(p);
+    while b # 0 do
+        begin
+            call q;
+            write(2 * d);
+            read(b);
+        end;
+end.
+```
+
+
+
+```
+(语义错误,行号:2)
+(语义错误,行号:16)
+(语义错误,行号:19)
+(语义错误,行号:20)
 ```
 

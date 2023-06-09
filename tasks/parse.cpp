@@ -255,12 +255,17 @@ public:
         std::set<std::string> temp = G.getTargetSelectSet(node->name, *s_it);
         for (auto s = temp.begin(); s != temp.end(); s++) {
           auto t = table[node->name].find(*s);
-          // if (t != table[node->name].end())
-            // throw std::runtime_error("Not LL(1) Grammar");
+          if (t != table[node->name].end())
+            throw std::runtime_error("Not LL(1) Grammar");
           table[node->name][*s] = *s_it;
         }
       }
     }
+    // table["A'"]["."] = Epsilon;
+    // table["B"]["."] = Epsilon;
+    // table["B'"]["."] = Epsilon;
+    // table["S"]["."] = Epsilon;
+    // table["B'"]["."] = Epsilon;
   }
   std::unordered_map<std::string, Terminal *> getTerminal() {
     return terminals;
@@ -364,6 +369,9 @@ public:
       if (isNonterminal(*s_it)) {
         std::string name = {*s_it};
         getFullName(s_it, name);
+        if (name == "E'") {
+          std::cout << std::endl;
+        }
         auto n = *getTargetNonterminal(name);
         auto temp = getFirstSet(n);
         if (temp.count(Epsilon)) {
@@ -375,6 +383,8 @@ public:
           break;
         }
       }
+      if (s_it == production.end())
+        break;
       if (!isNonterminal(*s_it) && *s_it != ' ') {
         generallyToEmpty = false;
         selects.insert({*s_it});
@@ -628,6 +638,8 @@ public:
         inputs.pop();
         if (verbose)
           std::cout << "匹配" + name << "\t\n";
+      } else {
+        throw std::runtime_error("PredictTable wrong!\n");
       }
       step++;
     }
@@ -1052,24 +1064,20 @@ Grammar *getGrammer() {
   GrammarInputType nonterminals = {
       {"Z", {"P"}},
       {"P", {"P'."}},
-      {"P'", {"A'BB'S"}},
+      {"P'", {"A'BI'S"}},
       {"A'", {"I", Epsilon}},
       {"B", {"V", Epsilon}},
-      {"B'", {"I'", Epsilon}},
-      {"I", {"CDF';"}},
+      {"I", {"cDF';"}},
       {"F'", {",DF'", Epsilon}},
       {"D", {"b=n"}},
       {"V", {"vbG;"}},
       {"G", {",bG", Epsilon}},
-      // {"I'", {"AP'G'"}},
-      // {"G'", {";I'G'", Epsilon}},
-      {"I'", {"G'"}},
-      {"G'", {"AP'", Epsilon}},
+      {"I'", {"AP';I'", Epsilon}},
       {"A", {"pb;"}},
       {"S", {"S'", "C", "W", "V'", "H", "D'", "F", "E'"}},
       {"S'", {"bxE"}},
-      {"F", {"sSH'e"}},
-      {"H'", {";SH'", Epsilon}},
+      {"F", {"sS;H'e"}},
+      {"H'", {"S;H'", Epsilon}},
       {"E'", {Epsilon}},
       {"C'", {"ERE", "oE"}},
       {"E", {"JTJ'"}},
@@ -1084,9 +1092,10 @@ Grammar *getGrammer() {
       {"C", {"iC'tS"}},
       {"V'", {"rb"}},
       {"W", {"wC'dS"}},
-      {"H", {"c(bK')"}},
+      {"H", {"y(bK')"}},
       {"K'", {",bK'", Epsilon}},
-      {"D'", {"z(bK')"}}};
+      {"M'", {",EM'", Epsilon}},
+      {"D'", {"z(EM')"}}};
   return buildGrammar(start_symbol, nonterminals);
 }
 
@@ -1106,7 +1115,7 @@ int main(int argc, char *argv[]) {
   //     Epsilon}}};
   // std::string start_symbol = "S";
 
-  Grammar G = *getGrammer();
+  // Grammar G = *getGrammer();
 
   // G.getTargetFirstSet("E");
   // G.getTargetFirstSet("E'");
@@ -1136,23 +1145,12 @@ int main(int argc, char *argv[]) {
 
   // GrammarInputType inputs = {{"S", {"A"}}, {"A", {"aAd", "aAb", Epsilon}}};
   // std::string start_symbol = "S";
-  // GrammarInputType inputs = {{"S'", {"S"}},
-  //                            {"S", {"L.L", "L"}},
-  //                            {"L", {"LB", "B"}},
-  //                            {"B", {"0", "1"}}};
-  // std::string start_symbol = "S'";
-  // Grammar G = *buildGrammar(start_symbol, inputs);
-  std::cout << G;
-  // auto slr = SLRParser(&G);
-  // slr.setInputs("101.110");
-  // slr.displayRouth();
-  // slr.displayACTIONs();
-  // slr.displayGOTOs();
-  // slr.analysis(true);
-
-  auto a = PredictTable(G);
-  a.diplayTable();
-  a.setInputs("b=n.");
-  a.analysis(true);
+  GrammarInputType inputs = {{"S'", {"S"}},
+                             {"S", {"L.L", "L"}},
+                             {"L", {"LB", "B"}},
+                             {"B", {"0", "1"}}};
+  std::string start_symbol = "S'";
+  Grammar G = *buildGrammar(start_symbol, inputs);
+  auto slr = SLRParser(&G);
   return 0;
 }

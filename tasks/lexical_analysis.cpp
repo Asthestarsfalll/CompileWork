@@ -96,11 +96,11 @@ std::unordered_map<std::string, int> operatorMapper = {
     {">", RELATIONAL}, {">=", RELATIONAL}};
 
 std::unordered_map<std::string, std::string> Mapper = {
-    {"call", "r"},      {"read", "c"},  {"const", "c"}, {"var", "v"},
-    {"procedure", "p"}, {"then", "t"},  {"if", "i"},    {"begin", "b"},
-    {"end", "e"},       {"read", "c"},  {"write", "z"}, {"#", "~"},
-    {"do", "d"},        {"while", "w"}, {">=", "g"},    {"<=", "l"},
-    {":=", "x"},        {"odd", "o"}};
+    {"call", "r"},      {"read", "y"},  {"const", "c"}, {"var", "v"},
+    {"procedure", "p"}, {"then", "t"},  {"if", "i"},    {"begin", "s"},
+    {"end", "e"},       {"write", "z"}, {"#", "~"},     {"do", "d"},
+    {"while", "w"},     {">=", "g"},    {"<=", "l"},    {":=", "x"},
+    {"odd", "o"}};
 
 int dispathOperator(std::string op) {
   auto it = operatorMapper.find(op);

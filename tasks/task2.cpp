@@ -547,11 +547,6 @@ public:
         }
       }
     }
-    // table["A'"]["."] = Epsilon;
-    // table["B"]["."] = Epsilon;
-    // table["B'"]["."] = Epsilon;
-    // table["S"]["."] = Epsilon;
-    // table["B'"]["."] = Epsilon;
   }
   std::unordered_map<std::string, Terminal *> getTerminal() {
     return terminals;
